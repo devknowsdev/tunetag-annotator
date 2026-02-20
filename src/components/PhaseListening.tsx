@@ -315,43 +315,54 @@ export function PhaseListening({
     <div className="phase-listening">
       {/* Sticky top bar */}
       <div className="listening-topbar">
-        <div>
-          <p className="label" style={{ color: 'var(--amber)' }}>
+        {/* Spotify embed — full track card, same as PhaseReady */}
+        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: '0.75rem' }}>
+          <iframe
+            src={`https://open.spotify.com/embed/track/${track.spotifyId}?utm_source=generator&theme=0`}
+            width="100%"
+            height="152"
+            frameBorder="0"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            loading="lazy"
+            title={`${track.artist} - ${track.name}`}
+          />
+        </div>
+
+        {/* Timer row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p className="label" style={{ color: 'var(--amber)', margin: 0 }}>
             TRACK {track.id} — PART 1 · TIMELINE
           </p>
-          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            {track.name}
-          </p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-          <button
-            onClick={toggleTimer}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '1.5rem',
-              color: timerColor,
-              transition: 'color 200ms',
-              padding: 0,
-            }}
-            title={isTimerRunning ? 'Click to pause' : 'Click to resume'}
-          >
-            {formatMSS(elapsedSeconds)}
-            {isWarning && isTimerRunning && (
-              <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}>⚠ 20 MIN</span>
-            )}
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
-              color: atCap ? 'var(--amber)' : 'var(--text-dim)',
-            }}>
-              {timeline.length} / {MAX_TIMELINE_ROWS}
-            </span>
-            <span className="kbd-hint">M to mark</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+            <button
+              onClick={toggleTimer}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '1.5rem',
+                color: timerColor,
+                transition: 'color 200ms',
+                padding: 0,
+              }}
+              title={isTimerRunning ? 'Click to pause' : 'Click to resume'}
+            >
+              {formatMSS(elapsedSeconds)}
+              {isWarning && isTimerRunning && (
+                <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}>⚠ 20 MIN</span>
+              )}
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                color: atCap ? 'var(--amber)' : 'var(--text-dim)',
+              }}>
+                {timeline.length} / {MAX_TIMELINE_ROWS}
+              </span>
+              <span className="kbd-hint">M to mark</span>
+            </div>
           </div>
         </div>
       </div>
@@ -479,7 +490,7 @@ export function PhaseListening({
         </div>
 
         {/* Timeline entries (reverse chronological) */}
-        <div style={{ padding: '0.5rem 1rem 6rem' }}>
+        <div style={{ padding: '0.5rem 1rem 9rem' }}>
           {displayEntries.length === 0 && (
             <p style={{
               textAlign: 'center',

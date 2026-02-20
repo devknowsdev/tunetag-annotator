@@ -286,7 +286,12 @@ function App() {
       )}
 
       {/* Spotify player bar — shown once authenticated */}
-      {spotifyToken && <SpotifyPlayer player={spotifyPlayer} />}
+      {spotifyToken && (
+        <SpotifyPlayer
+          player={spotifyPlayer}
+          spotifyId={activeAnnotation?.track.spotifyId ?? null}
+        />
+      )}
 
       {/* Resume banner */}
       {bannerVisible && (

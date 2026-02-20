@@ -2,10 +2,12 @@
 // z-index 150 — above all phase content, below HowToUse modal (200).
 // All colours and fonts use existing CSS variables.
 
+import { useMemo, useRef } from 'react';
 import type { UseSpotifyPlayerReturn } from '../hooks/useSpotifyPlayer';
 
 interface SpotifyPlayerProps {
   player: UseSpotifyPlayerReturn;
+  spotifyId?: string | null;
 }
 
 /** Format milliseconds → m:ss */
@@ -16,7 +18,39 @@ function fmtMs(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
+/** Seeded pseudo-random number generator (mulberry32) */
+function mulberry32(seed: number) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/** Turn a string into a numeric seed */
+function strToSeed(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+/** Generate BAR_COUNT waveform bar heights (0–1) seeded from a string */
+const BAR_COUNT = 80;
+function generateWaveform(seed: string): number[] {
+  const rng = mulberry32(strToSeed(seed));
+  // Create a smooth envelope — quiet start/end, louder middle
+  return Array.from({ length: BAR_COUNT }, (_, i) => {
+    const envelope = Math.sin((Math.PI * i) / (BAR_COUNT - 1)); // 0→1→0 arc
+    const noise = rng();
+    return Math.max(0.05, Math.min(1, envelope * 0.6 + noise * 0.55));
+  });
+}
+
+export function SpotifyPlayer({ player, spotifyId }: SpotifyPlayerProps) {
   const {
     isReady,
     isPlaying,
@@ -33,10 +67,18 @@ export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
 
   const progress = duration > 0 ? position / duration : 0;
 
-  function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
+  // Generate a stable waveform for the current track
+  const waveform = useMemo(
+    () => generateWaveform(spotifyId ?? currentTrackName ?? 'default'),
+    [spotifyId, currentTrackName]
+  );
+
+  const scrubberRef = useRef<HTMLDivElement>(null);
+
+  function handleScrubberClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!isReady || duration === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     seek(Math.floor(ratio * duration));
   }
 
@@ -45,11 +87,8 @@ export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
   }
 
   function handlePlayPause() {
-    if (isPlaying) {
-      pause();
-    } else {
-      play();
-    }
+    if (isPlaying) pause();
+    else play();
   }
 
   function handleSeekToStart() {
@@ -58,20 +97,45 @@ export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
 
   return (
     <div style={styles.bar}>
-      {/* Progress bar */}
+      {/* ── Waveform scrubber ── */}
       <div
-        style={styles.progressTrack}
-        onClick={handleProgressClick}
+        ref={scrubberRef}
+        style={styles.waveformTrack}
+        onClick={handleScrubberClick}
         role="slider"
         aria-label="Playback position"
         aria-valuenow={Math.round(progress * 100)}
         aria-valuemin={0}
         aria-valuemax={100}
+        title={isReady ? `${fmtMs(position)} / ${fmtMs(duration)}` : 'Connecting…'}
       >
-        <div style={{ ...styles.progressFill, width: `${progress * 100}%` }} />
+        {waveform.map((h, i) => {
+          const barProgress = i / BAR_COUNT;
+          const played = barProgress < progress;
+          const isHead = Math.abs(barProgress - progress) < 1.5 / BAR_COUNT;
+          return (
+            <div
+              key={i}
+              style={{
+                ...styles.waveBar,
+                height: `${h * 100}%`,
+                background: played ? 'var(--amber)' : 'var(--border-active)',
+                opacity: isHead ? 1 : played ? 0.9 : 0.35,
+                transform: isHead ? 'scaleY(1.2)' : 'scaleY(1)',
+              }}
+            />
+          );
+        })}
+        {/* Playhead line */}
+        <div
+          style={{
+            ...styles.playhead,
+            left: `${progress * 100}%`,
+          }}
+        />
       </div>
 
-      {/* Main row */}
+      {/* ── Main row ── */}
       <div style={styles.row}>
         {/* Track info */}
         <div style={styles.trackInfo}>
@@ -85,7 +149,6 @@ export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
 
         {/* Controls */}
         <div style={styles.controls}>
-          {/* Seek to start */}
           <button
             style={styles.iconBtn}
             onClick={handleSeekToStart}
@@ -95,8 +158,6 @@ export function SpotifyPlayer({ player }: SpotifyPlayerProps) {
           >
             ⏮
           </button>
-
-          {/* Play / Pause */}
           <button
             style={{ ...styles.iconBtn, ...styles.playBtn }}
             onClick={handlePlayPause}
@@ -140,28 +201,46 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--surface)',
     borderTop: '1px solid var(--border-active)',
   },
-  progressTrack: {
+  waveformTrack: {
     width: '100%',
-    height: '3px',
-    background: 'var(--border)',
+    height: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1px',
+    padding: '5px 0',
     cursor: 'pointer',
     position: 'relative',
+    userSelect: 'none',
+    boxSizing: 'border-box',
   },
-  progressFill: {
-    height: '100%',
-    background: 'var(--amber)',
+  waveBar: {
+    flex: 1,
+    borderRadius: '1px',
+    transition: 'background 0.15s, opacity 0.15s, transform 0.1s',
     pointerEvents: 'none',
-    transition: 'width 0.25s linear',
+    minWidth: 0,
+  },
+  playhead: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: '2px',
+    background: 'var(--amber)',
+    transform: 'translateX(-50%)',
+    pointerEvents: 'none',
+    borderRadius: '1px',
+    boxShadow: '0 0 6px var(--amber-glow)',
   },
   row: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0.5rem 1rem',
+    padding: '0.25rem 1rem 0.5rem',
     gap: '0.75rem',
     maxWidth: '800px',
     margin: '0 auto',
     width: '100%',
+    boxSizing: 'border-box',
   },
   trackInfo: {
     flex: 1,
