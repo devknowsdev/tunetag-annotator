@@ -2,8 +2,7 @@
 // FIX #2: resumeSavedState() returns snapshot; timer restore uses it directly.
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TemplateState, RecordingEntry } from './types';
-import { useAnnotationState } from './hooks/useAnnotationState';
-import { useTimer } from './hooks/useTimer';
+import { useAnnotationState, useTimer } from './hooks';
 import SetupScreen from './components/SetupScreen';
 import { PhaseSelect } from './components/PhaseSelect';
 import { PhaseReady } from './components/PhaseReady';
@@ -15,7 +14,7 @@ import { PhasePromptsTags } from './components/PhasePromptsTags';
 import { PhaseFlow } from './components/PhaseFlow';
 import { HowToUse } from './components/HowToUse';
 import { SpotifyPlayer } from './components/SpotifyPlayer';
-import { useSpotifyPlayer } from './hooks/useSpotifyPlayer';
+import { useSpotifyPlayer } from './hooks';
 import { handleSpotifyCallback, getStoredToken, initiateSpotifyLogin } from './lib/spotifyAuth';
 import { playTrack, transferPlayback } from './lib/spotifyApi';
 

@@ -4,7 +4,7 @@ import { GLOBAL_CATEGORIES } from '../lib/schema';
 import { polishText, PolishUnavailableError } from '../lib/polishText';
 import { lintAnnotation } from '../lib/lintAnnotation';
 import { LintPanel } from './LintPanel';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useKeyboardShortcuts } from '../hooks';
 
 interface Props {
   annotation: TrackAnnotation;

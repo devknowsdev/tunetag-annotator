@@ -24,7 +24,7 @@ import {
   WHEN_SUGGESTIONS,
 } from '../lib/phraseBuilder';
 import { polishText, PolishUnavailableError } from '../lib/polishText';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useKeyboardShortcuts } from '../hooks';
 
 interface Props {
   annotation: TrackAnnotation;

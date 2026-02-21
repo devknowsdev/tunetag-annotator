@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { TrackAnnotation, Phase, TimelineEntry } from '../types';
 import { TAG_SUGGESTIONS, SECTION_TYPE_SHORTCUTS } from '../lib/schema';
+import { useMicMeter } from '../hooks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,75 +41,25 @@ const FLOW_TAG_GROUPS: Array<[string, string[]]> = [
 // ── Mic Level Meter ─────────────────────────────────────────────────────────
 
 function MicLevelMeter({ stream }: { stream: MediaStream | null }) {
+  const barLevels = useMicMeter(stream);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
-  const ctxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const bufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
   useEffect(() => {
-    if (!stream) return;
-
-    const audioCtx = new AudioContext();
-    ctxRef.current = audioCtx;
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    analyserRef.current = analyser;
-    bufRef.current = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
-
-    const source = audioCtx.createMediaStreamSource(stream);
-    source.connect(analyser);
-
-    const BAR_COUNT = 20;
-    const INTERVAL = 1000 / 15;
-    let last = 0;
-
-    function draw(now: number) {
-      if (now - last < INTERVAL) {
-        rafRef.current = requestAnimationFrame(draw);
-        return;
-      }
-      last = now;
-
-      const canvas = canvasRef.current;
-      if (!canvas || !analyserRef.current || !bufRef.current) {
-        rafRef.current = requestAnimationFrame(draw);
-        return;
-      }
-      analyserRef.current.getByteFrequencyData(bufRef.current);
-
-      const step = Math.floor(bufRef.current.length / BAR_COUNT);
-      const ctx2d = canvas.getContext('2d');
-      if (!ctx2d) { rafRef.current = requestAnimationFrame(draw); return; }
-
-      const W = canvas.width;
-      const H = canvas.height;
-      ctx2d.clearRect(0, 0, W, H);
-
-      const barW = Math.floor((W - BAR_COUNT + 1) / BAR_COUNT);
-      for (let i = 0; i < BAR_COUNT; i++) {
-        let sum = 0;
-        for (let j = 0; j < step; j++) sum += bufRef.current[i * step + j];
-        const avg = sum / step / 255;
-        const barH = Math.max(2, Math.floor(avg * H));
-        ctx2d.fillStyle = 'var(--amber)';
-        ctx2d.fillRect(i * (barW + 1), H - barH, barW, barH);
-      }
-
-      rafRef.current = requestAnimationFrame(draw);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx2d = canvas.getContext('2d');
+    if (!ctx2d) return;
+    const BAR_COUNT = barLevels.length;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx2d.clearRect(0, 0, W, H);
+    const barW = Math.floor((W - BAR_COUNT + 1) / BAR_COUNT);
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const barH = Math.max(2, Math.floor(barLevels[i] * H));
+      ctx2d.fillStyle = 'var(--amber)';
+      ctx2d.fillRect(i * (barW + 1), H - barH, barW, barH);
     }
-
-    rafRef.current = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      source.disconnect();
-      void audioCtx.close();
-      ctxRef.current = null;
-      analyserRef.current = null;
-      bufRef.current = null;
-    };
-  }, [stream]);
+  }, [barLevels]);
 
   return (
     <canvas
