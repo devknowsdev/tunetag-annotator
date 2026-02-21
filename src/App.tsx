@@ -13,7 +13,7 @@ import { PhaseReview } from './components/PhaseReview';
 import { PhasePromptsTags } from './components/PhasePromptsTags';
 import { PhaseFlow } from './components/PhaseFlow';
 import { HowToUse } from './components/HowToUse';
-import { SpotifyPlayer } from './components/SpotifyPlayer';
+import { AppSidebar } from './components/AppSidebar';
 import { useSpotifyPlayer } from './hooks';
 import { handleSpotifyCallback, getStoredToken, initiateSpotifyLogin } from './lib/spotifyAuth';
 import { playTrack, transferPlayback } from './lib/spotifyApi';
@@ -41,11 +41,11 @@ function App() {
 
   // ── API key gate ───────────────────────────────────────────────────────────
   const [apiKeyDone, setApiKeyDone] = useState(() =>
-    sessionStorage.getItem('beatpulse_api_key_gate_done') === '1'
+    sessionStorage.getItem('tunetag_api_key_gate_done') === '1'
   );
 
   function handleApiKeyDone() {
-    sessionStorage.setItem('beatpulse_api_key_gate_done', '1');
+    sessionStorage.setItem('tunetag_api_key_gate_done', '1');
     setApiKeyDone(true);
   }
 
@@ -216,98 +216,21 @@ function App() {
 
   return (
     <div className="app-root">
-      {/* Help + Setup buttons */}
-      {!showHelp && phase !== 'prompts_tags' && (
-        <div style={{ position: 'fixed', top: '0.75rem', right: '0.75rem', zIndex: 100, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {activeAnnotation && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
-              color: timer.isRunning ? 'var(--amber)' : 'var(--text-dim)',
-              letterSpacing: '0.05em',
-              padding: '0 0.5rem',
-            }}>
-              ⏱ {Math.floor(timer.elapsedSeconds / 60)}:{String(timer.elapsedSeconds % 60).padStart(2, '0')}
-            </span>
-          )}
-          <button
-            onClick={() => setApiKeyDone(false)}
-            aria-label="Setup"
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border-active)',
-              borderRadius: 'var(--radius)',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.6875rem',
-              letterSpacing: '0.05em',
-              padding: '0 0.625rem',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              cursor: 'pointer',
-            }}
-          >
-            SETUP
-          </button>
-          <button
-            onClick={() => setShowHelp(true)}
-            aria-label="Help"
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border-active)',
-              borderRadius: '50%',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.875rem',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-            }}
-          >
-            ?
-          </button>
-        </div>
-      )}
-
       {/* Help modal */}
       {showHelp && <HowToUse onClose={() => setShowHelp(false)} />}
 
-      {/* Connect Spotify button — only shown when not authenticated */}
-      {!spotifyToken && phase !== 'prompts_tags' && (
-        <button
-          onClick={() => { initiateSpotifyLogin(); }}
-          aria-label="Connect Spotify"
-          style={{
-            position: 'fixed',
-            bottom: '0.75rem',
-            left: '0.75rem',
-            zIndex: 100,
-            background: 'transparent',
-            border: '1px solid var(--border-active)',
-            borderRadius: 'var(--radius)',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.6875rem',
-            letterSpacing: '0.05em',
-            padding: '0.375rem 0.625rem',
-            cursor: 'pointer',
-          }}
-        >
-          ♫ Connect Spotify
-        </button>
-      )}
-
-      {/* Spotify player bar — shown once authenticated */}
-      {spotifyToken && phase !== 'prompts_tags' && (
-        <SpotifyPlayer
-          player={spotifyPlayer}
-          spotifyId={activeAnnotation?.track.spotifyId ?? null}
-        />
-      )}
+      {/* Global sidebar — hidden in flow mode */}
+      <AppSidebar
+        phase={phase}
+        activeAnnotation={activeAnnotation}
+        timerElapsed={timer.elapsedSeconds}
+        timerRunning={timer.isRunning}
+        onSetup={() => setApiKeyDone(false)}
+        onHelp={() => setShowHelp(true)}
+        onSpotifyLogin={initiateSpotifyLogin}
+        spotifyToken={spotifyToken}
+        spotifyPlayer={spotifyPlayer}
+      />
 
       {/* Resume banner */}
       {bannerVisible && (
@@ -374,6 +297,7 @@ function App() {
             isTimerRunning={timer.isRunning}
             timerStart={timerStart}
             timerPause={timerPause}
+            timerSeek={timer.setSeconds}
             setPhase={state.setPhase}
             setMarkEntryDraft={state.setMarkEntryDraft}
             updateTimeline={state.updateTimeline}
@@ -383,6 +307,8 @@ function App() {
             addRecording={addRecording}
             deleteRecording={deleteRecording}
             clearRecordings={clearRecordings}
+            spotifyToken={spotifyToken}
+            spotifyPlayer={spotifyPlayer}
           />
 
           {phase === 'mark_entry' && state.markEntryDraft && (
@@ -407,6 +333,7 @@ function App() {
           isTimerRunning={timer.isRunning}
           timerStart={timerStart}
           timerPause={timerPause}
+          timerSeek={timer.setSeconds}
           setPhase={state.setPhase}
           updateTimeline={state.updateTimeline}
           setStatus={state.setStatus}

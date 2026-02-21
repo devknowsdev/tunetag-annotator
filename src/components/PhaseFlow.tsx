@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { TrackAnnotation, Phase, TimelineEntry } from '../types';
 import { TAG_SUGGESTIONS, SECTION_TYPE_SHORTCUTS } from '../lib/schema';
 import { useMicMeter } from '../hooks';
+import { WaveformScrubber } from './WaveformScrubber';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ interface Props {
   isTimerRunning: boolean;
   timerStart: () => void;
   timerPause: () => void;
+  timerSeek: (seconds: number) => void;
   setPhase: (phase: Phase) => void;
   updateTimeline: (trackId: number, entries: TimelineEntry[]) => void;
   setStatus: (trackId: number, status: TrackAnnotation['status'], extra?: Partial<TrackAnnotation>) => void;
@@ -79,8 +81,11 @@ export function PhaseFlow({
   isTimerRunning,
   timerStart,
   timerPause,
+  timerSeek,
   setPhase,
   updateTimeline,
+  spotifyToken: _spotifyToken,
+  spotifyPlayer,
 }: Props) {
   const trackId = annotation.track.id;
   const timeline = annotation.timeline;
@@ -241,6 +246,34 @@ export function PhaseFlow({
     [timeline]
   );
 
+  // ── Spotify sync helpers ────────────────────────────────────────────────
+  function spotifyPlay() {
+    if (spotifyPlayer?.isReady) spotifyPlayer.play().catch(() => {});
+  }
+  function spotifyPause() {
+    if (spotifyPlayer?.isReady) spotifyPlayer.pause().catch(() => {});
+  }
+  function spotifySeekMs(ms: number) {
+    if (spotifyPlayer?.isReady) spotifyPlayer.seek(Math.max(0, ms)).catch(() => {});
+  }
+
+  function handlePlayPause() {
+    if (isTimerRunning) {
+      timerPause();
+      spotifyPause();
+    } else {
+      timerStart();
+      spotifyPlay();
+    }
+  }
+
+  function handleSeek(deltaSecs: number) {
+    const next = Math.max(0, elapsedSeconds + deltaSecs);
+    timerSeek(next);
+    if (isTimerRunning) timerStart();
+    spotifySeekMs(next * 1000);
+  }
+
   // ── Progress bar ───────────────────────────────────────────────────────
   const durationSeconds = (annotation.track as any).durationSeconds ?? 300;
   const progressFraction = Math.min(1, elapsedSeconds / durationSeconds);
@@ -325,18 +358,19 @@ export function PhaseFlow({
         </div>
       </div>
 
-      {/* ── PROGRESS BAR ── */}
-      <div style={{
-        width: '100%', height: '4px',
-        background: 'var(--surface)',
-        flexShrink: 0,
-      }}>
-        <div style={{
-          height: '100%',
-          width: `${progressFraction * 100}%`,
-          background: 'var(--amber)',
-          transition: 'width 1s linear',
-        }} />
+      {/* ── WAVEFORM SCRUBBER ── */}
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <WaveformScrubber
+          spotifyTrackId={annotation.track.spotifyId}
+          spotifyToken={_spotifyToken}
+          elapsedSeconds={elapsedSeconds}
+          durationSeconds={durationSeconds}
+          onSeek={(secs) => {
+            timerSeek(secs);
+            if (isTimerRunning) timerStart();
+            spotifySeekMs(secs * 1000);
+          }}
+        />
       </div>
 
       {/* ── SCROLLABLE BODY ── */}
@@ -349,9 +383,7 @@ export function PhaseFlow({
         }}>
           <button
             aria-label="Back 10 seconds"
-            onClick={() => {
-              /* Skip -10s: timerStart/Pause can't seek; we just show visual feedback */
-            }}
+            onClick={() => handleSeek(-10)}
             style={transportBtnStyle}
           >
             ⏮ −10s
@@ -359,7 +391,7 @@ export function PhaseFlow({
 
           <button
             aria-label={isTimerRunning ? 'Pause' : 'Play'}
-            onClick={isTimerRunning ? timerPause : timerStart}
+            onClick={handlePlayPause}
             style={{
               ...transportBtnStyle,
               minWidth: '72px', minHeight: '72px',
@@ -375,9 +407,7 @@ export function PhaseFlow({
 
           <button
             aria-label="Forward 10 seconds"
-            onClick={() => {
-              /* Skip +10s */
-            }}
+            onClick={() => handleSeek(10)}
             style={transportBtnStyle}
           >
             +10s ⏭

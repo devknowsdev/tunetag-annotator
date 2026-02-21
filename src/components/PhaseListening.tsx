@@ -14,6 +14,7 @@ import type {
 import { MAX_TIMELINE_ROWS } from '../lib/schema';
 import { useKeyboardShortcuts, useMicMeter, useAudioDevices, useAudioRecorder, useDictation } from '../hooks';
 import { RecordingsPanel, RecordingCard } from './RecordingsPanel';
+import { WaveformScrubber } from './WaveformScrubber';
 
 interface Props {
   annotation: TrackAnnotation;
@@ -32,6 +33,11 @@ interface Props {
   addRecording: (entry: RecordingEntry) => void;
   deleteRecording: (id: string) => void;
   clearRecordings: () => void;
+  // Spotify
+  spotifyToken: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  spotifyPlayer: any;
+  timerSeek: (seconds: number) => void;
 }
 
 function formatMSS(totalSeconds: number): string {
@@ -131,14 +137,14 @@ function useDictationFlow(
 
     capturedTsRef.current = state.capturedTimestamp;
 
-    const savedDeviceId = localStorage.getItem('beatpulse_mic_device') ?? '';
+    const savedDeviceId = localStorage.getItem('tunetag_mic_device') ?? '';
     const audioConstraint: MediaTrackConstraints | boolean = savedDeviceId
       ? { deviceId: { exact: savedDeviceId } }
       : true;
 
     const result = await recorder.startRecording(audioConstraint);
     if ('error' in result) {
-      if (savedDeviceId) localStorage.removeItem('beatpulse_mic_device');
+      if (savedDeviceId) localStorage.removeItem('tunetag_mic_device');
       setState((p) => ({ ...p, status: 'error', error: result.error }));
       return;
     }
@@ -354,6 +360,9 @@ export function PhaseListening({
   addRecording,
   deleteRecording,
   clearRecordings,
+  spotifyToken,
+  spotifyPlayer,
+  timerSeek,
 }: Props) {
   const track = annotation.track;
   const timeline = annotation.timeline;
@@ -484,9 +493,32 @@ export function PhaseListening({
   const isWarning = elapsedSeconds >= 20 * 60;
   const timerColor = !isTimerRunning ? 'var(--text-muted)' : isWarning ? 'var(--error)' : 'var(--amber)';
 
+  // ── Spotify sync helpers ───────────────────────────────────────────────────
+  function spotifyPlay() {
+    if (spotifyPlayer?.isReady) spotifyPlayer.play().catch(() => {});
+  }
+  function spotifyPause() {
+    if (spotifyPlayer?.isReady) spotifyPlayer.pause().catch(() => {});
+  }
+  function spotifySeek(seconds: number) {
+    if (spotifyPlayer?.isReady) spotifyPlayer.seek(Math.max(0, seconds) * 1000).catch(() => {});
+  }
+
   function toggleTimer() {
-    if (isTimerRunning) timerPause();
-    else timerStart();
+    if (isTimerRunning) {
+      timerPause();
+      spotifyPause();
+    } else {
+      timerStart();
+      spotifyPlay();
+    }
+  }
+
+  function seekRelative(deltaSecs: number) {
+    const next = Math.max(0, elapsedSeconds + deltaSecs);
+    timerSeek(next);
+    if (isTimerRunning) timerStart();
+    spotifySeek(next);
   }
 
   const displayEntries = [...timeline].reverse();
@@ -577,18 +609,23 @@ export function PhaseListening({
           </div>
         </div>
 
-        {/* ── FS PROGRESS BAR ── */}
-        <div style={{ width: '100%', height: '3px', background: 'var(--surface)', flexShrink: 0 }}>
-          <div style={{
-            height: '100%',
-            width: `${Math.min(1, elapsedSeconds / ((annotation.track as any).durationSeconds ?? 300)) * 100}%`,
-            background: 'var(--amber)',
-            transition: 'width 1s linear',
-          }} />
+        {/* ── FS WAVEFORM SCRUBBER ── */}
+        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <WaveformScrubber
+            spotifyTrackId={track.spotifyId}
+            spotifyToken={spotifyToken}
+            elapsedSeconds={elapsedSeconds}
+            durationSeconds={(annotation.track as any).durationSeconds ?? 300}
+            onSeek={(secs) => {
+              timerSeek(secs);
+              if (isTimerRunning) timerStart();
+              if (spotifyPlayer?.isReady) spotifyPlayer.seek(secs * 1000).catch(() => {});
+            }}
+          />
         </div>
 
         {/* ── FS SCROLLABLE BODY ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', paddingBottom: '0' }}>
 
           {/* Dictation overlay */}
           <DictationOverlay
@@ -611,7 +648,7 @@ export function PhaseListening({
             <button
               aria-label="Back 10 seconds"
               style={fsTransportBtn}
-              onClick={() => { /* seek not available via timer prop */ }}
+              onClick={() => seekRelative(-10)}
             >
               ⏮ −10s
             </button>
@@ -631,7 +668,7 @@ export function PhaseListening({
             <button
               aria-label="Forward 10 seconds"
               style={fsTransportBtn}
-              onClick={() => { /* seek not available via timer prop */ }}
+              onClick={() => seekRelative(10)}
             >
               +10s ⏭
             </button>
@@ -648,7 +685,7 @@ export function PhaseListening({
           )}
 
           {/* ── FS TAG / MARK GRID ── */}
-          <div style={{ marginBottom: '6rem' }}>
+          <div style={{ marginBottom: '1rem' }}>
             <p style={{
               fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
               color: 'var(--text-dim)', letterSpacing: '0.08em',
@@ -703,56 +740,14 @@ export function PhaseListening({
           </div>
         </div>
 
-        {/* ── FS FIXED BOTTOM TOOLBAR ── */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          background: 'var(--surface)',
-          borderTop: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0.625rem 1rem',
-          gap: '0.5rem',
-          zIndex: 10,
-        }}>
-          {/* Left: Dictate */}
-          <button
-            className="btn-ghost"
-            onClick={handleDictateClick}
-            disabled={atCap || dictation.state.status !== 'idle'}
-            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
-          >
-            🎙 DICTATE
-          </button>
-
-          {/* Centre: Recordings toggle */}
-          <button
-            className="btn-ghost"
-            onClick={() => { setFsRecordingsOpen((v) => !v); setFsTimelineOpen(false); }}
-            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
-          >
-            {fsRecordingsOpen ? '▾ ' : '▴ '}
-            REC
-            {trackRecordingsFs.length > 0 && ` (${trackRecordingsFs.length})`}
-          </button>
-
-          {/* Right: Timeline toggle */}
-          <button
-            className="btn-ghost"
-            onClick={() => { setFsTimelineOpen((v) => !v); setFsRecordingsOpen(false); }}
-            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
-          >
-            {fsTimelineOpen ? '▾ ' : '▴ '}
-            TIMELINE ({timeline.length})
-          </button>
-        </div>
-
-        {/* ── FS TIMELINE DRAWER ── */}
+        {/* ── FS TIMELINE DRAWER (above toolbar) ── */}
         {fsTimelineOpen && (
           <div style={{
-            position: 'absolute', bottom: '56px', left: 0, right: 0,
+            flexShrink: 0,
             background: 'var(--surface)',
             borderTop: '1px solid var(--border)',
-            maxHeight: '55vh', overflowY: 'auto',
-            zIndex: 9, padding: '0.75rem 1rem 1rem',
+            maxHeight: '45vh', overflowY: 'auto',
+            padding: '0.75rem 1rem 1rem',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
@@ -789,14 +784,14 @@ export function PhaseListening({
           </div>
         )}
 
-        {/* ── FS RECORDINGS DRAWER ── */}
+        {/* ── FS RECORDINGS DRAWER (above toolbar) ── */}
         {fsRecordingsOpen && (
           <div style={{
-            position: 'absolute', bottom: '56px', left: 0, right: 0,
+            flexShrink: 0,
             background: 'var(--surface)',
             borderTop: '1px solid var(--border)',
-            maxHeight: '55vh', overflowY: 'auto',
-            zIndex: 9, padding: '0.75rem 1rem 1rem',
+            maxHeight: '45vh', overflowY: 'auto',
+            padding: '0.75rem 1rem 1rem',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
@@ -826,6 +821,48 @@ export function PhaseListening({
             )}
           </div>
         )}
+
+        {/* ── FS FIXED BOTTOM TOOLBAR ── */}
+        <div style={{
+          flexShrink: 0,
+          background: 'var(--surface)',
+          borderTop: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0.625rem 1rem',
+          gap: '0.5rem',
+        }}>
+          {/* Left: Dictate */}
+          <button
+            className="btn-ghost"
+            onClick={handleDictateClick}
+            disabled={atCap || dictation.state.status !== 'idle'}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            🎙 DICTATE
+          </button>
+
+          {/* Centre: Recordings toggle */}
+          <button
+            className="btn-ghost"
+            onClick={() => { setFsRecordingsOpen((v) => !v); setFsTimelineOpen(false); }}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            {fsRecordingsOpen ? '▾ ' : '▴ '}
+            REC
+            {trackRecordingsFs.length > 0 && ` (${trackRecordingsFs.length})`}
+          </button>
+
+          {/* Right: Timeline toggle */}
+          <button
+            className="btn-ghost"
+            onClick={() => { setFsTimelineOpen((v) => !v); setFsRecordingsOpen(false); }}
+            style={{ fontSize: '0.78rem', minHeight: '44px', flex: 1 }}
+          >
+            {fsTimelineOpen ? '▾ ' : '▴ '}
+            TIMELINE ({timeline.length})
+          </button>
+        </div>
+
       </div>
     );
   }
