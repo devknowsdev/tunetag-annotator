@@ -12,6 +12,7 @@ import { PhaseMarkEntry } from './components/PhaseMarkEntry';
 import { PhaseGlobal } from './components/PhaseGlobal';
 import { PhaseReview } from './components/PhaseReview';
 import { PhasePromptsTags } from './components/PhasePromptsTags';
+import { PhaseFlow } from './components/PhaseFlow';
 import { HowToUse } from './components/HowToUse';
 import { SpotifyPlayer } from './components/SpotifyPlayer';
 import { useSpotifyPlayer } from './hooks/useSpotifyPlayer';
@@ -389,6 +390,21 @@ function App() {
             />
           )}
         </>
+      )}
+
+      {phase === 'flow' && activeAnnotation && (
+        <PhaseFlow
+          annotation={activeAnnotation}
+          elapsedSeconds={timer.elapsedSeconds}
+          isTimerRunning={timer.isRunning}
+          timerStart={timerStart}
+          timerPause={timerPause}
+          setPhase={state.setPhase}
+          updateTimeline={state.updateTimeline}
+          setStatus={state.setStatus}
+          spotifyToken={spotifyToken}
+          spotifyPlayer={spotifyPlayer}
+        />
       )}
 
       {phase === 'global' && activeAnnotation && (

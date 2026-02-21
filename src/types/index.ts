@@ -98,7 +98,8 @@ export type Phase =
   | 'mark_entry'
   | 'global'
   | 'review'
-  | 'prompts_tags';
+  | 'prompts_tags'
+  | 'flow';
 
 export interface CategoryDef {
   key: keyof GlobalAnalysis;

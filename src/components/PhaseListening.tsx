@@ -1244,6 +1244,7 @@ export function PhaseListening({
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button className="btn-ghost" onClick={() => { timerPause(); setPhase('select'); }}>← Menu</button>
           <button className="btn-ghost btn-destructive" onClick={handleSkip}>SKIP THIS TRACK</button>
+          <button className="btn-ghost" onClick={() => setPhase('flow')}>⟩ FLOW MODE</button>
         </div>
         <button className="btn-primary" disabled={timeline.length === 0} onClick={handleDone}>
           DONE — PART 2 →

@@ -1,10 +1,53 @@
 # BeatPulse Annotator — Claude Code Master Session Doc
-*Generated: 21 February 2026*
+*Updated: 21 February 2026 — Session 3*
 *Paste prompts ONE AT A TIME. Wait for TypeScript clean ✓ before moving to next.*
 
 ---
 
-## PHASE 1 — NEW FEATURES & LAYOUTS
+## ALREADY DONE — DO NOT REDO
+
+The following work is complete and committed. Claude Code should not touch these files unless a prompt explicitly says so.
+
+### Session 1 (Claude Code)
+- Audio recording + dictation in `PhaseListening.tsx`
+- `RecordingEntry` type, `addRecording` / `deleteRecording` / `clearRecordings` in `App.tsx`
+- Mic level meter, waveform SVG, Whisper transcription, collapsible recordings panel
+- `vite.config.ts`, `package.json` dev scripts, `scripts/open-chrome.sh`
+
+### Session 2 (Manual)
+- `SetupScreen.tsx` replacing `ApiKeyGate.tsx`
+- `App.tsx` updated: imports SetupScreen, SETUP button added
+
+### Session 3 (Manual — this session)
+- `src/types/index.ts` — added TagType, TagDef, TagPack, PhraseEntry, PromptsTagsLibraryState, UndoAction, TagPackImport; added 'prompts_tags' to Phase union; added promptsTagsLibrary + undoStack to AppState
+- `src/lib/tagPacks.ts` — seed data (General, DnB, House, Trap packs) — **NEW FILE**
+- `src/lib/tagLibrary.ts` — filter/group utilities — **NEW FILE**
+- `src/lib/tagImport.ts` — JSON pack parser/validator — **NEW FILE**
+- `src/lib/phraseBuilder.ts` — Who/What/Where/When sentence generator — **NEW FILE**
+- `src/hooks/useAnnotationState.ts` — extended with library state, undo stack, all library actions
+- `src/components/PhasePromptsTags.tsx` — full management screen (tabbed: Library / Packs / Phrase Builder / Import) — **NEW FILE**
+- `src/components/PhaseMarkEntry.tsx` — reordered layout, collapsible Section Type + Tags, structured tag chips, phrase builder panel
+- `src/components/PhaseSelect.tsx` — Prompts & Tags button added
+- `src/App.tsx` — PhasePromptsTags wired into phase router; library prop passed to PhaseMarkEntry
+- `src/index.css` — all new styles appended (tag chips, collapsible panels, pack cards, phrase builder, import dropzone, undo toast)
+
+---
+
+## PENDING SMALL FIXES (do before Phase 1 prompts if not already done)
+
+```
+For the project at /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
+
+1. In src/lib/spotifyAuth.ts, find the REDIRECT_URI constant and replace it with:
+   const REDIRECT_URI = window.location.origin + '/callback'
+   (Remove any hardcoded URL that was there before.)
+
+2. Run npx tsc --noEmit. Report TypeScript clean ✓
+```
+
+---
+
+## PHASE 1 — NEW FEATURES
 *Priority: highest. Do these first.*
 
 ---
@@ -16,6 +59,7 @@
 For the project at /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
 
 1. In src/types/index.ts, add 'flow' to the Phase union type.
+   (The union already has 'prompts_tags' from the last session — add 'flow' alongside it.)
 
 2. In src/App.tsx:
    - Add import: import { PhaseFlow } from './components/PhaseFlow'
@@ -181,14 +225,16 @@ Report line count of PhaseFlow.tsx.
 
 ---
 
-### PROMPT 3 — Improve PhaseSelect (main landing page)
+### PROMPT 3 — Improve PhaseSelect layout
 *Est. time: 15 min. Layout improvement only — no logic changes.*
 
 ```
 Improve the PhaseSelect.tsx layout for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
 
-Do NOT change any click/routing logic. Only improve the visual layout and information display.
+IMPORTANT: The file already has a "PROMPTS & TAGS" button added in the last session.
+Do NOT remove it. Do not change any routing logic.
+Only improve the visual layout and information display of the track cards and header.
 
 CURRENT ISSUES:
 - Narrow centred column wastes screen width
@@ -215,14 +261,15 @@ IMPROVEMENTS:
    - Status badge should be more prominent — larger, coloured background:
      not_started: muted/dim
      in_progress: amber background
-     complete: success green background  
+     complete: success green background
      skipped: dim/strikethrough style
 
 3. HEADER
    - Make the session header more spacious
    - Add a subtitle showing overall progress:
      "N of N tracks complete" in muted monospace
-   - Add a START ALL / CONTINUE SESSION button if any tracks are in_progress
+   - Add a CONTINUE SESSION button if any tracks are in_progress
+     (routes to the first in_progress track's listening phase)
 
 4. EMPTY STATE
    - If all tracks are not_started, show a brief welcome prompt:
@@ -236,6 +283,7 @@ Run npx tsc --noEmit. Report TypeScript clean ✓
 ---
 
 ### PROMPT 4 — Commit Phase 1
+
 ```
 Commit and push Phase 1 work for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -249,31 +297,24 @@ Commit and push Phase 1 work for the project at
 ---
 
 ## PHASE 2 — FULL SCREEN LAYOUT MODE
-*Do this only after Phase 1 is committed and working.*
-*Nice to have — skip if compute is running low.*
+*Priority: medium. Do after Phase 1 is committed.*
 
 ---
 
-### PROMPT 5 — Full Screen layout toggle for PhaseListening
-*Est. time: 25 min. Layout only — no logic changes.*
+### PROMPT 5 — Full Screen layout toggle in PhaseListening
 
 ```
-Add a Full Screen view mode to PhaseListening.tsx for the project at
+Add a Full Screen layout mode toggle to PhaseListening.tsx for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
 
-IMPORTANT: Do NOT change any logic, hooks, state, or props.
-Only add a viewMode state and a new layout branch in the JSX.
+IMPORTANT: PhaseListening.tsx is large (~1254 lines). Make surgical changes only.
+Do NOT restructure, rename, or move any existing logic.
 
-1. Add viewMode state at the top of PhaseListening component:
-   const [viewMode, setViewMode] = useState<'classic' | 'fullscreen'>(
-     () => (localStorage.getItem('beatpulse_view_mode') as 'classic' | 'fullscreen') ?? 'classic'
-   )
-   On change: localStorage.setItem('beatpulse_view_mode', viewMode)
+1. Add local state: const [viewMode, setViewMode] = useState<'classic' | 'fullscreen'>('classic')
 
-2. Add a toggle button in the existing top controls:
-   - Icon: ⛶ when classic (click → go fullscreen)
-   - Icon: ▣ when fullscreen (click → go classic)
-   - Small, subtle, top-right of the listening area
+2. Add a toggle button in the top controls area (next to the existing FLOW MODE button):
+   Label: "⛶ FULL" when classic, "⊠ EXIT FULL" when fullscreen
+   On click: toggles between 'classic' and 'fullscreen'
 
 3. When viewMode === 'classic': render existing layout UNCHANGED.
 
@@ -319,6 +360,7 @@ Only add a viewMode state and a new layout branch in the JSX.
 ---
 
 ### PROMPT 6 — Commit Phase 2
+
 ```
 Commit and push Phase 2 for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -338,6 +380,7 @@ Commit and push Phase 2 for the project at
 ---
 
 ### PROMPT 7 — Housekeeping
+
 ```
 Clean up project housekeeping for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -365,6 +408,7 @@ Clean up project housekeeping for the project at
 ---
 
 ### PROMPT 8 — Extract useMicMeter hook
+
 ```
 Refactor PhaseListening.tsx for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -390,6 +434,7 @@ Extract the mic level meter logic into a dedicated hook.
 ---
 
 ### PROMPT 9 — Extract useAudioRecorder hook
+
 ```
 Refactor PhaseListening.tsx for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -416,6 +461,7 @@ Extract MediaRecorder and mic stream logic into a dedicated hook.
 ---
 
 ### PROMPT 10 — Extract useDictation hook
+
 ```
 Refactor PhaseListening.tsx for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -440,6 +486,7 @@ Extract SpeechRecognition logic into a dedicated hook.
 ---
 
 ### PROMPT 11 — Extract RecordingsPanel component
+
 ```
 Refactor PhaseListening.tsx for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -475,6 +522,7 @@ Extract the recordings panel UI into a dedicated component.
 ---
 
 ### PROMPT 12 — Final cleanup and barrel file
+
 ```
 Final cleanup pass for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -504,6 +552,7 @@ Final cleanup pass for the project at
 ---
 
 ### PROMPT 13 — Final commit
+
 ```
 Commit and push the full refactor for the project at
 /Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator
@@ -521,8 +570,56 @@ Commit and push the full refactor for the project at
 
 | Phase | Prompts | Priority | Skip if low on compute? |
 |-------|---------|----------|------------------------|
+| Small fixes | spotifyAuth.ts | Do first | No |
 | 1 — New features | 1–4 | HIGHEST | No — do all of these |
 | 2 — Full Screen | 5–6 | MEDIUM | Yes — nice to have |
 | 3 — Refactor | 7–13 | LOWER | Yes — app works without it |
 
 **If compute runs low:** Stop after Prompt 4. Everything in Phase 1 is committed and working. Come back to Phases 2 and 3 in the next session.
+
+---
+
+## QUICK REFERENCE
+
+```bash
+# Navigate to project
+cd "/Users/duif/DK APP DEV/BeatPulseLab/beatpulse-annotator"
+
+# Run locally (always use localhost, not 127.0.0.1)
+npm run dev
+
+# TypeScript check
+npx tsc --noEmit
+
+# Build for production
+npm run build
+
+# Commit and push
+git add .
+git commit -m "your message"
+git push
+
+# Check recent commits
+git log --oneline -5
+
+# Check file line counts
+wc -l src/**/*.{ts,tsx,css} src/*.{ts,tsx,css} | sort -rn
+```
+
+## CSS Variables (reference — use these, not custom ones)
+```css
+--bg, --surface, --surface-raised
+--border, --border-active
+--amber, --amber-bg, --amber-glow
+--text, --text-muted, --text-dim
+--error, --error-bg
+--success
+--font-mono, --font-serif, --font-display
+--radius, --radius-pill
+--transition
+```
+
+## Button Classes
+```
+btn-primary, btn-ghost, btn-small, label
+```
