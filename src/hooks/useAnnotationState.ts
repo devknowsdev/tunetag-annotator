@@ -14,7 +14,7 @@ import type {
   TagPackImport,
   TagType,
 } from '../types';
-import { TRACKS } from '../lib/schema';
+import { getActiveTracks } from '../lib/schema';
 import { BUILTIN_PACKS, BUILTIN_TAGS, DEFAULT_LIBRARY_STATE } from '../lib/tagPacks';
 
 const STORAGE_KEY = 'tunetag_v1';
@@ -33,7 +33,7 @@ function makeDefaultLibrary(): PromptsTagsLibraryState {
 }
 
 function makeEmptyAnnotation(trackId: number, annotator: string): TrackAnnotation {
-  const track = TRACKS.find((t) => t.id === trackId)!;
+  const track = getActiveTracks().find((t) => t.id === trackId)!;
   return {
     track,
     annotator,
@@ -46,12 +46,11 @@ function makeEmptyAnnotation(trackId: number, annotator: string): TrackAnnotatio
 
 function makeDefaultAppState(): AppState {
   const annotator = localStorage.getItem(ANNOTATOR_KEY) ?? '';
+  const tracks = getActiveTracks();
+  const annotations: Record<number, TrackAnnotation> = {};
+  tracks.forEach((t) => { annotations[t.id] = makeEmptyAnnotation(t.id, annotator); });
   return {
-    annotations: {
-      1: makeEmptyAnnotation(1, annotator),
-      2: makeEmptyAnnotation(2, annotator),
-      3: makeEmptyAnnotation(3, annotator),
-    },
+    annotations,
     activeTrackId: null,
     phase: 'select',
     markEntryDraft: null,

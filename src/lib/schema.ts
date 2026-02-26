@@ -1,4 +1,5 @@
 import type { Track, CategoryDef } from '../types';
+import { loadCustomTracks } from './trackResolver';
 
 // Source: B1 of each Track sheet. A future parser would extract these.
 export const TRACKS: Track[] = [
@@ -33,6 +34,17 @@ export const TRACKS: Track[] = [
       'Solomon Ray - Find Your Rest https://open.spotify.com/track/3XZMl51zqZDdAb0rwzSuxz?si=0de6d87aeb41496e',
   },
 ];
+
+/**
+ * Returns the active track list.
+ * Uses custom tracks from localStorage if saved, otherwise falls back to the
+ * hardcoded TRACKS array.
+ */
+export function getActiveTracks(): Track[] {
+  const custom = loadCustomTracks();
+  if (custom && custom.length > 0) return custom;
+  return TRACKS;
+}
 
 // Hard structural limit from the Excel template. Never exceed.
 export const MAX_TIMELINE_ROWS = 10;

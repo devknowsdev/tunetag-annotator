@@ -22,11 +22,17 @@ export interface UseSpotifyPlayerReturn {
 export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
   // ── Stable refs — mutations do not trigger re-renders ──────────────────────
   const playerRef = useRef<SpotifyPlayer | null>(null);
-  // ReturnType<typeof setInterval> is portable: number in browsers, NodeJS.Timer in Node.
-  // Matches the exact pattern used in useTimer.ts.
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sdkInjectedRef = useRef<boolean>(false);
   const playerCreatedRef = useRef<boolean>(false); // guard: create player only once
+
+  // FIX: tokenRef so getOAuthToken always provides the latest token.
+  // The closure over the initial accessToken value in createPlayer would silently
+  // use a stale token after refresh. This ref is the source of truth.
+  const tokenRef = useRef<string | null>(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   // ── Rendered state ─────────────────────────────────────────────────────────
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -40,7 +46,7 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
 
   // ── Position polling ───────────────────────────────────────────────────────
   // player_state_changed fires on play/pause/seek but NOT continuously during
-  // playback — we need the 1s interval to drive the live position counter.
+  // playback — we need the interval to drive the live position counter.
 
   const stopPolling = useCallback((): void => {
     if (intervalRef.current !== null) {
@@ -72,24 +78,25 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
         .catch((): void => {
           // Player disconnected or errored — do not crash the interval
         });
-      }, 250);
+    }, 250);
   }, [stopPolling]);
 
   // ── createPlayer ───────────────────────────────────────────────────────────
   // Extracted so it can be called from either onSpotifyWebPlaybackSDKReady
   // (token already available) or the token-watch effect (SDK already ready).
   // The playerCreatedRef guard ensures it only ever runs once.
-  const createPlayer = useCallback((accessToken: string): void => {
+  const createPlayer = useCallback((): void => {
     if (playerCreatedRef.current) return;
     playerCreatedRef.current = true;
 
     const player = new window.Spotify.Player({
       name: 'TuneTag Annotator',
       volume: 0.8,
+      // FIX: always read from tokenRef, not a stale closure value.
+      // This means token refreshes are picked up automatically.
       getOAuthToken: (cb: (token: string) => void): void => {
-        // Always use the latest token snapshot via closure over the ref below.
-        // Not calling cb (expired) is preferable to calling with a stale token.
-        if (accessToken) cb(accessToken);
+        const t = tokenRef.current;
+        if (t) cb(t);
       },
     });
 
@@ -128,7 +135,7 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
     });
 
     player.addListener('account_error', (err: SpotifyPlayerError): void => {
-      console.error('[SpotifyPlayer] account_error:', err.message);
+      console.error('[SpotifyPlayer] account_error (Premium required):', err.message);
     });
 
     player.connect().catch((err: unknown): void => {
@@ -151,9 +158,8 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
       // Token may or may not be available yet. If it is, create the player
       // immediately. If not, the token-watch effect below will do it once the
       // token arrives.
-      const currentToken = token;
-      if (currentToken) {
-        createPlayer(currentToken);
+      if (tokenRef.current) {
+        createPlayer();
       } else {
         console.warn('[SpotifyPlayer] onSpotifyWebPlaybackSDKReady: no token yet, waiting for token-watch effect');
       }
@@ -189,7 +195,7 @@ export function useSpotifyPlayer(token: string | null): UseSpotifyPlayerReturn {
     if (!window.__spotifySDKReady) return;
     if (playerCreatedRef.current) return;
     console.log('[SpotifyPlayer] Token-watch effect: SDK ready and token now available, creating player');
-    createPlayer(token);
+    createPlayer();
   }, [token, createPlayer]);
 
   // ── Player control callbacks ───────────────────────────────────────────────

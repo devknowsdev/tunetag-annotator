@@ -1,5 +1,7 @@
 // FIX #1: Single timer source — useTimer lives ONLY here, props thread down.
 // FIX #2: resumeSavedState() returns snapshot; timer restore uses it directly.
+// FIX #3: playTrack called with position_ms so Spotify always starts at correct position.
+// FIX #4: Drift correction effect keeps timer in sync with Spotify's authoritative position.
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TemplateState, RecordingEntry } from './types';
 import { useAnnotationState, useTimer } from './hooks';
@@ -54,7 +56,6 @@ function App() {
   const state = useAnnotationState();
 
   // ── Auto-load researched tag packs on setup complete ───────────────────────
-  // Runs once after apiKeyDone becomes true. Missing pack files are skipped silently.
   useEffect(() => {
     if (!apiKeyDone) return;
     loadResearchedPacks(state.importTagPack);
@@ -115,7 +116,7 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.pause, state.setTimerRunning]);
 
-  // ── FIX #3: Timer rehydration on track/phase changes ──────────────────────
+  // ── Timer rehydration on track/phase changes ───────────────────────────────
   useEffect(() => {
     if (state.activeTrackId === null) {
       timer.pause();
@@ -176,6 +177,10 @@ function App() {
   // Keep ref in sync every render so timerStart/timerPause closures use latest player
   spotifyPlayerRef.current = spotifyPlayer;
 
+  // ── FIX #3: Initial track load with position_ms ────────────────────────────
+  // When the user enters the listening phase, we queue the spotifyId. Once the
+  // player is ready and a device is available, we transfer playback and play the
+  // track from the current timer position (so resuming a session starts correctly).
   const pendingSpotifyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -199,7 +204,10 @@ function App() {
     if (!spotifyId) return;
     pendingSpotifyIdRef.current = null;
 
-    console.log('[Spotify] Calling transferPlayback then playTrack for:', spotifyId);
+    // FIX #3: pass current timer position as position_ms so Spotify starts
+    // at the same point the annotation session was at, not always from 0.
+    const positionMs = timer.elapsedSeconds * 1000;
+    console.log('[Spotify] Calling transferPlayback then playTrack for:', spotifyId, 'at', positionMs, 'ms');
     (async () => {
       try {
         await transferPlayback(spotifyPlayer.deviceId!, spotifyToken);
@@ -207,13 +215,31 @@ function App() {
         console.error('[Spotify] transferPlayback error:', err);
       }
       try {
-        await playTrack(spotifyId, spotifyPlayer.deviceId!, spotifyToken);
+        await playTrack(spotifyId, spotifyPlayer.deviceId!, spotifyToken, { positionMs });
       } catch (err: unknown) {
         console.error('[Spotify] playTrack error:', err);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotifyPlayer.isReady, spotifyPlayer.deviceId]);
+
+  // ── FIX #4: Drift correction ───────────────────────────────────────────────
+  // Spotify's position (from SDK polling) is authoritative. If the local timer
+  // drifts more than 1s from Spotify's reported position, snap the timer.
+  // Only corrects while both the timer and Spotify are actively playing.
+  useEffect(() => {
+    if (!state.timerRunning) return;
+    if (!spotifyPlayer.isPlaying) return;
+    if (spotifyPlayer.position === 0) return; // Spotify not yet reporting position
+
+    const spotifySec = Math.floor(spotifyPlayer.position / 1000);
+    const drift = Math.abs(spotifySec - timer.elapsedSeconds);
+    if (drift >= 1) {
+      console.log(`[Spotify] Drift correction: timer=${timer.elapsedSeconds}s, spotify=${spotifySec}s, drift=${drift}s`);
+      timer.setSeconds(spotifySec);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotifyPlayer.position, spotifyPlayer.isPlaying, state.timerRunning]);
 
   // ── Early returns ──────────────────────────────────────────────────────────
   if (!apiKeyDone) {
